@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: jobs_db
+      MYSQL_USER: jobuser
+      MYSQL_PASSWORD: jobpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql  # makes db 'persistent'
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "jobuser", "-pjobpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://jobuser:jobpass@db:3306/jobs_db
+      PORT: 8000
+    depends_on:
+      db:
+        condition: service_healthy  # laucnh web container only if healthcheck successful
+
+volumes:
+  mysql_data:
