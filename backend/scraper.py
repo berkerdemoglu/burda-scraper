@@ -1,5 +1,6 @@
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
+from datetime import datetime, timezone
 
 import requests
 
@@ -40,7 +41,52 @@ class Scraper:
 
         return data[1:]  # 0-th entry is legal notice so skip that
 
+    def normalize_raw_job(raw_job: Dict) -> Union[Dict, None]:
+        """Safely extracts and cleans raw dictionary fields from a (raw) job entry."""
+        job_id = str(raw_job.get("id", "")).strip()
+        title = str(raw_job.get("position", "")).strip()
+        company = str(raw_job.get("company", "")).strip()
+        url = str(raw_job.get("url", "")).strip()
+
+        # Drop entries missing non-nullable fields
+        if not job_id or not title or not company or not url:
+            return None
+
+        # Flatten list of tags to comma separated string
+        raw_tags = raw_job.get("tags", list())
+        if isinstance(raw_tags, list):
+            tags = ", ".join(str(t).strip() for t in raw_tags if str(t).strip())
+        else:
+            tags = str(raw_tags).strip() or None
+
+        location = str(raw_job.get("location", "")).strip() or None
+
+        # Parse date_posted from Unix timestamp (epoch seconds)
+        epoch = raw_job.get("epoch")
+        date_posted = None
+        if epoch:
+            try:
+                date_posted = datetime.fromtimestamp(int(epoch), tz=timezone.utc)
+            except (ValueError, TypeError, OSError):
+                date_posted = None
+
+        return {
+            "job_id": job_id,
+            "title": title,
+            "company": company,
+            "tags": tags,
+            "location": location,
+            "date_posted": date_posted,
+            "url": url,
+        }
+
     def run(self) -> List[Dict[str, Any]]:
         """Runs the scraper. Fetches jobs from the API, normalizes them and drops irregular entries."""
-        # TODO: Implement full scraper functionality
-        return self.fetch_jobs()
+        raw_jobs = self.fetch_jobs()
+        normalized_jobs = []
+        for job in raw_jobs:
+            normalized_job = self.normalize_raw_job(job)
+            if normalized_job is not None:
+                normalized_jobs.append(normalized_job)
+
+        return normalized_jobs
