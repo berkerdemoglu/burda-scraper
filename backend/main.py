@@ -1,6 +1,6 @@
 import logging
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
@@ -80,5 +80,53 @@ def trigger_scrape():
         logger.exception("Database error while persisting jobs")
         return jsonify({"status": "error", "message": "Database transaction failed"}), 500
 
+    finally:
+        session.close()
+
+
+@app.route("/jobs", methods=["GET"])
+def get_jobs():
+    """Returns stored jobs, optionally filtered by keyword and/or company."""
+    keyword = request.args.get('keyword', type=str)
+    company = request.args.get('company', type=str)
+
+    session = SessionLocal()
+    try:
+        query = session.query(Job)
+
+        if keyword:
+            # Search for the keyword in both the job title and in the tags
+            like_pattern = f'%{keyword}%'
+            query = query.filter(
+                (Job.title.ilike(like_pattern)) | (Job.tags.ilike(like_pattern))
+            )
+
+        if company:
+            query = query.filter(Job.company.ilike(f'%{company}%'))
+
+        jobs = query.order_by(Job.date_posted.desc()).all()
+
+        results = [
+            {
+                'id': job.id,
+                'job_id': job.job_id,
+                'title': job.title,
+                'company': job.company,
+                'tags': job.tags.split(",") if job.tags else [],
+                'location': job.location,
+                'date_posted': job.date_posted.isoformat() if job.date_posted else None,
+                'url': job.url,
+            }
+            for job in jobs
+        ]
+
+        return jsonify({
+            'status': 'success',
+            'count': len(results),
+            'jobs': results,
+        }), 200
+    except SQLAlchemyError:
+        logger.exception("Database error while fetching jobs")
+        return jsonify({"status": "error", "message": "Database query failed"}), 500
     finally:
         session.close()
