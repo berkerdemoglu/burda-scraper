@@ -17,6 +17,20 @@ class Scraper:
     def __init__(self):
         self.session = requests.Session()
 
+    def _fix_mojibake(self, text: str) -> str:
+        """Repair double-encoded text (UTF-8 bytes misread as Latin-1/Windows-1252)."""
+        try:
+            return text.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+
+        try:
+            return text.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+
+        return text
+
     def _clean_text(self, value: Any) -> str:
         """Convert any API value to clean, unescaped, single-spaced string."""
         if value is None:
@@ -24,6 +38,7 @@ class Scraper:
         
         text = str(value)
         text = html.unescape(text)
+        text = self._fix_mojibake(text)
         text = re.sub(r"\s+", " ", text)
         return text.strip()
 
