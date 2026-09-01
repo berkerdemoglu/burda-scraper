@@ -10,6 +10,16 @@ from models import Base, Job
 from scraper import Scraper
 
 
+# Note: Such functions could be moved to a utils.py
+def get_top_tags(session, limit=5):
+    rows = session.query(Job.tags).filter(Job.tags.isnot(None)).all()
+    counter = Counter()
+    for (tag_string,) in rows:
+        tags = [t.strip() for t in tag_string.split(",") if t.strip()]
+        counter.update(tags)
+    return [{"tag": tag, "count": count} for tag, count in counter.most_common(limit)]
+
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -128,5 +138,44 @@ def get_jobs():
     except SQLAlchemyError:
         logger.exception("Database error while fetching jobs")
         return jsonify({"status": "error", "message": "Database query failed"}), 500
+    finally:
+        session.close()
+
+
+@app.route("/stats", methods=["GET"])
+def get_stats():
+    """Returns aggregate stats: total jobs, top 5 tags, jobs per day."""
+    session = SessionLocal()
+    try:
+        total_jobs = session.query(func.count(Job.id)).scalar()
+
+        top_tags = get_top_tags(session, limit=5)
+
+        jobs_per_day_rows = (
+            session.query(
+                func.date(Job.date_posted).label("day"),
+                func.count(Job.id).label("count"),
+            )
+            .filter(Job.date_posted.isnot(None))
+            .group_by(func.date(Job.date_posted))
+            .order_by(func.date(Job.date_posted))
+            .all()
+        )
+        jobs_per_day = [
+            {"date": str(row.day), "count": row.count}
+            for row in jobs_per_day_rows
+        ]
+
+        return jsonify({
+            "status": "success",
+            "total_jobs": total_jobs,
+            "top_tags": top_tags,
+            "jobs_per_day": jobs_per_day,
+        }), 200
+
+    except SQLAlchemyError:
+        logger.exception("Database error while computing stats")
+        return jsonify({"status": "error", "message": "Failed to compute stats"}), 500
+
     finally:
         session.close()
