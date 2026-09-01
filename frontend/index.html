@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Job Listings Dashboard</title>
+
+<!-- Tailwind via CDN: no build step, just utility classes available immediately -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Chart.js via CDN: exposes a global `Chart` constructor -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+
+<div class="max-w-6xl mx-auto p-6 space-y-6">
+
+  <!-- Header + scrape trigger -->
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold">Job Listings Dashboard</h1>
+    <button id="scrapeBtn"
+      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow disabled:opacity-50">
+      Run Scrape
+    </button>
+  </div>
+
+  <!-- Global status banner (loading / error / success) -->
+  <div id="statusBanner" class="hidden text-sm px-4 py-2 rounded-lg"></div>
+
+  <!-- Stat cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="bg-white rounded-xl shadow p-4">
+      <p class="text-gray-500 text-sm">Total Jobs</p>
+      <p id="totalJobs" class="text-3xl font-bold">–</p>
+    </div>
+    <div class="bg-white rounded-xl shadow p-4 sm:col-span-2">
+      <p class="text-gray-500 text-sm mb-2">Top 5 Tags</p>
+      <div id="topTags" class="flex flex-wrap gap-2"></div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="bg-white rounded-xl shadow p-4">
+    <p class="text-gray-500 text-sm mb-2">Jobs Posted Per Day</p>
+    <canvas id="jobsChart" height="90"></canvas>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex flex-wrap gap-3">
+    <input id="keywordInput" type="text" placeholder="Filter by keyword or tag..."
+      class="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-3 py-2" />
+    <input id="companyInput" type="text" placeholder="Filter by company..."
+      class="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-3 py-2" />
+  </div>
+
+  <!-- Job table -->
+  <div class="bg-white rounded-xl shadow overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          <th class="p-3">Title</th>
+          <th class="p-3">Company</th>
+          <th class="p-3">Tags</th>
+          <th class="p-3">Location</th>
+          <th class="p-3">Posted</th>
+          <th class="p-3">Link</th>
+        </tr>
+      </thead>
+      <tbody id="jobsTableBody"></tbody>
+    </table>
+    <p id="emptyState" class="hidden text-center text-gray-400 p-6">No jobs found.</p>
+  </div>
+
+</div>
+
+<script>
+  // Same-origin API base: Flask serves this file, so relative paths work with no CORS setup.
+  const API_BASE = "";
+
+  let jobsChart = null; // Chart.js instance, created once and updated afterwards
+
+  // ---------- Utility: status banner ----------
+  function showStatus(message, type = "info") {
+    const banner = document.getElementById("statusBanner");
+    const colors = {
+      info: "bg-blue-50 text-blue-700",
+      error: "bg-red-50 text-red-700",
+      success: "bg-green-50 text-green-700",
+    };
+    banner.className = `text-sm px-4 py-2 rounded-lg ${colors[type]}`;
+    banner.textContent = message;
+    banner.classList.remove("hidden");
+  }
+
+  function hideStatus() {
+    document.getElementById("statusBanner").classList.add("hidden");
+  }
+
+  // ---------- Utility: simple debounce for filter inputs ----------
+  function debounce(fn, delay = 300) {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+
+  // ---------- API calls ----------
+  async function fetchJson(url, options = {}) {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).message; } catch (_) {}
+      throw new Error(detail || `Request failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async function loadStats() {
+    try {
+      const data = await fetchJson(`${API_BASE}/stats`);
+      document.getElementById("totalJobs").textContent = data.total_jobs ?? 0;
+      renderTopTags(data.top_tags || []);
+      renderChart(data.jobs_per_day || []);
+    } catch (err) {
+      showStatus(`Failed to load stats: ${err.message}`, "error");
+    }
+  }
+
+  async function loadJobs() {
+    const keyword = document.getElementById("keywordInput").value.trim();
+    const company = document.getElementById("companyInput").value.trim();
+
+    const params = new URLSearchParams();
+    if (keyword) params.set("keyword", keyword);
+    if (company) params.set("company", company);
+
+    try {
+      const data = await fetchJson(`${API_BASE}/jobs?${params.toString()}`);
+      renderJobsTable(data.jobs || []);
+    } catch (err) {
+      showStatus(`Failed to load jobs: ${err.message}`, "error");
+    }
+  }
+
+  async function scrapeJobs() {
+    const btn = document.getElementById("scrapeBtn");
+    btn.disabled = true;
+    showStatus("Scraping in progress...", "info");
+    try {
+      const data = await fetchJson(`${API_BASE}/scrape`, { method: "POST" });
+      showStatus(
+        `Scrape done: ${data.added} added, ${data.skipped} skipped, ${data.total_processed} processed.`,
+        "success"
+      );
+      await Promise.all([loadStats(), loadJobs()]);
+    } catch (err) {
+      showStatus(`Scrape failed: ${err.message}`, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- Rendering ----------
+  function renderTopTags(tags) {
+    const container = document.getElementById("topTags");
+    container.innerHTML = "";
+    if (!tags.length) {
+      container.innerHTML = `<span class="text-gray-400 text-sm">No tags yet</span>`;
+      return;
+    }
+    tags.forEach((t) => {
+      const tagName = t.tag ?? t[0] ?? t;
+      const tagCount = t.count ?? t[1] ?? "";
+      const chip = document.createElement("span");
+      chip.className = "bg-blue-50 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full";
+      chip.textContent = tagCount !== "" ? `${tagName} (${tagCount})` : tagName;
+      container.appendChild(chip);
+    });
+  }
+
+  function renderChart(jobsPerDay) {
+    const labels = jobsPerDay.map((d) => d.date);
+    const counts = jobsPerDay.map((d) => d.count);
+    const ctx = document.getElementById("jobsChart").getContext("2d");
+
+    if (jobsChart) {
+      jobsChart.data.labels = labels;
+      jobsChart.data.datasets[0].data = counts;
+      jobsChart.update();
+      return;
+    }
+
+    jobsChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "Jobs posted",
+          data: counts,
+          borderColor: "rgb(37, 99, 235)",
+          backgroundColor: "rgba(37, 99, 235, 0.1)",
+          tension: 0.3,
+          fill: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      },
+    });
+  }
+
+  function renderJobsTable(jobs) {
+    const tbody = document.getElementById("jobsTableBody");
+    const emptyState = document.getElementById("emptyState");
+    tbody.innerHTML = "";
+
+    if (!jobs.length) {
+      emptyState.classList.remove("hidden");
+      return;
+    }
+    emptyState.classList.add("hidden");
+
+    jobs.forEach((job) => {
+      const tr = document.createElement("tr");
+      tr.className = "border-t border-gray-100 hover:bg-gray-50";
+      tr.innerHTML = `
+        <td class="p-3 font-medium">${escapeHtml(job.title)}</td>
+        <td class="p-3">${escapeHtml(job.company)}</td>
+        <td class="p-3 text-xs text-gray-500">${(job.tags || []).map(escapeHtml).join(", ")}</td>
+        <td class="p-3">${escapeHtml(job.location || "-")}</td>
+        <td class="p-3">${job.date_posted ? new Date(job.date_posted).toLocaleDateString() : "-"}</td>
+        <td class="p-3">
+          <a href="${job.url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">View</a>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Basic XSS guard since job data comes from an external upstream source
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+
+  // ---------- Wiring ----------
+  document.getElementById("scrapeBtn").addEventListener("click", scrapeJobs);
+  const debouncedLoadJobs = debounce(loadJobs, 300);
+  document.getElementById("keywordInput").addEventListener("input", debouncedLoadJobs);
+  document.getElementById("companyInput").addEventListener("input", debouncedLoadJobs);
+
+  // Initial load
+  hideStatus();
+  loadStats();
+  loadJobs();
+</script>
+</body>
+</html>
