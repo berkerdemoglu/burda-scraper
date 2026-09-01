@@ -47,7 +47,14 @@ def serve_dashboard():
 def trigger_scrape():
     """Triggers the scraper, persists new jobs, and returns an execution summary."""
     scraper = Scraper()
-    jobs_data = scraper.run()
+    try:
+        jobs_data = scraper.run()
+    except Exception:
+        logger.exception("Scraper failed while fetching from upstream")
+        return jsonify({
+            "status": "error",
+            "message": "Failed to fetch jobs from upstream source"
+        }), 502
 
     if not jobs_data:
         return jsonify({
