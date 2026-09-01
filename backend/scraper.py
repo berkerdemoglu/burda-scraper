@@ -1,8 +1,8 @@
-import logging
 import html
+import logging
 import re
-from typing import List, Dict, Any, Union
 from datetime import datetime, timezone
+from typing import Any
 
 import requests
 
@@ -42,7 +42,7 @@ class Scraper:
         text = re.sub(r"\s+", " ", text)
         return text.strip()
 
-    def fetch_jobs(self) -> List[Dict[str, Any]]:
+    def fetch_jobs(self) -> list[dict[str, Any]]:
         """Call the RemoteOK API and return the unprocessed job entries."""
         try:
             response = self.session.get(
@@ -66,7 +66,7 @@ class Scraper:
 
         return data[1:]  # 0-th entry is legal notice so skip that
 
-    def normalize_raw_job(self, raw_job: Dict) -> Union[Dict, None]:
+    def normalize_raw_job(self, raw_job: dict) -> dict | None:
         """Safely extracts and cleans raw dictionary fields from a (raw) job entry."""
         job_id = str(raw_job.get("id", "")).strip()
         title = self._clean_text(raw_job.get("position"))
@@ -78,7 +78,7 @@ class Scraper:
             return None
 
         # Flatten list of tags to comma separated string
-        raw_tags = raw_job.get("tags", list())
+        raw_tags = raw_job.get("tags", [])
         if isinstance(raw_tags, list):
             cleaned_tags = []
             for t in raw_tags:
@@ -118,7 +118,7 @@ class Scraper:
             "url": url,
         }
 
-    def run(self) -> List[Dict[str, Any]]:
+    def run(self) -> list[dict[str, Any]]:
         """Runs the scraper. Fetches jobs from the API, normalizes them and drops irregular entries."""
         raw_jobs = self.fetch_jobs()
         normalized_jobs = []

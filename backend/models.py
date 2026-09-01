@@ -1,13 +1,5 @@
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint
-)
+from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import declarative_base
-
 
 Base = declarative_base()
 

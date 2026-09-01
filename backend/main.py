@@ -3,10 +3,9 @@ import os
 from collections import Counter
 
 from flask import Flask, jsonify, request, send_from_directory
-
 from sqlalchemy import create_engine, func
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import sessionmaker
 
 from backend.models import Base, Job
 from backend.scraper import Scraper
@@ -197,5 +196,5 @@ def get_stats():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", "8000"))
     app.run(host="0.0.0.0", port=port)

@@ -7,8 +7,9 @@ _db_fd, _db_path = tempfile.mkstemp(suffix=".db")
 os.close(_db_fd)
 os.environ["DATABASE_URL"] = f"sqlite+pysqlite:///{_db_path}"
 
-from backend.main import app as flask_app, engine  # noqa: E402
-from backend.models import Base  # noqa: E402
+from backend.main import app as flask_app
+from backend.main import engine
+from backend.models import Base
 
 
 @pytest.fixture()

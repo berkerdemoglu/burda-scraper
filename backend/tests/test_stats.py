@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.main import SessionLocal
 from backend.models import Job
@@ -11,7 +11,7 @@ def _seed_db(session, job_id, title, company, tags, day):
         company=company,
         tags=tags,
         location="Remote",
-        date_posted=datetime(2026, 8, day),
+        date_posted=datetime(2026, 8, day, tzinfo=timezone.utc),
         url=f"https://remoteok.com/remote-jobs/{job_id}",
     ))
 
