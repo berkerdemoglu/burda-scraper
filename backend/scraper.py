@@ -41,7 +41,7 @@ class Scraper:
 
         return data[1:]  # 0-th entry is legal notice so skip that
 
-    def normalize_raw_job(raw_job: Dict) -> Union[Dict, None]:
+    def normalize_raw_job(self, raw_job: Dict) -> Union[Dict, None]:
         """Safely extracts and cleans raw dictionary fields from a (raw) job entry."""
         job_id = str(raw_job.get("id", "")).strip()
         title = str(raw_job.get("position", "")).strip()

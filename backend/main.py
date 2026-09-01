@@ -1,13 +1,15 @@
 import logging
+import os
+from collections import Counter
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 
-from models import Base, Job
-from scraper import Scraper
+from backend.models import Base, Job
+from backend.scraper import Scraper
 
 
 # Note: Such functions could be moved to a utils.py
@@ -33,6 +35,12 @@ Base.metadata.create_all(engine)  # create 'jobs' table if it doesn't already ex
 
 # Flask
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
+
+
+@app.route("/")
+def serve_dashboard():
+    """Serves the single-page dashboard at the root URL."""
+    return send_from_directory(app.static_folder, "index.html")
 
 
 @app.route("/scrape", methods=["POST"])
@@ -179,3 +187,8 @@ def get_stats():
 
     finally:
         session.close()
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)

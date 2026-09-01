@@ -1,5 +1,7 @@
 FROM python:3.10-slim
 
+WORKDIR /app
+
 # Get full logs in case of crash and don't store bytecode on disk
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
@@ -15,5 +17,3 @@ COPY frontend /app/frontend
 EXPOSE 8000
 
 CMD ["python", "-m", "backend.main"]
-
-WORKDIR /app

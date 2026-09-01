@@ -1,11 +1,9 @@
-version: "3.8"
-
 services:
   db:
     image: mysql:8.0
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: rootpassword  # in a real app u would use environment variables here
       MYSQL_DATABASE: jobs_db
       MYSQL_USER: jobuser
       MYSQL_PASSWORD: jobpass
